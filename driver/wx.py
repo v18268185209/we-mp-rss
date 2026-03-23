@@ -391,7 +391,7 @@ class Wx:
             self.release_lock()
             if NeedExit :
                 self.Clean()
-                self.Close()
+            self.Close()
         return self.SESSION
     def format_token(self, cookies: list, token: str = ""):
         cookies_str=""
