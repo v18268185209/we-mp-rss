@@ -145,7 +145,18 @@ class Db:
                         return now_ts
                 return now_ts
 
-            def _to_unix_millis(value, fallback_seconds: int) -> int:
+            def _to_unix_millis(value, fallback_seconds) -> int:
+                now_ts = int(datetime.now().timestamp())
+                # 确保 fallback_seconds 是有效的秒级时间戳
+                if fallback_seconds is None:
+                    fallback_seconds = now_ts
+                if isinstance(fallback_seconds, (int, float)):
+                    fallback_seconds = int(fallback_seconds)
+                    if fallback_seconds > 1_000_000_000_000:
+                        fallback_seconds = int(fallback_seconds / 1000)
+                else:
+                    fallback_seconds = now_ts
+
                 if value is None:
                     return fallback_seconds * 1000
                 if isinstance(value, datetime):
@@ -185,8 +196,10 @@ class Db:
                 art.created_at=datetime.now()
             if isinstance(art.created_at, str):
                 art.created_at=datetime.strptime(art.created_at ,'%Y-%m-%d %H:%M:%S')
+            # 先处理毫秒，用原始值作为fallback，再转换秒
+            original_updated_at = art.updated_at
+            art.updated_at_millis = _to_unix_millis(art.updated_at_millis, original_updated_at)
             art.updated_at = _to_unix_seconds(art.updated_at)
-            art.updated_at_millis = _to_unix_millis(art.updated_at_millis, art.updated_at)
             art.content=art.content
 
             if art.content_html is None:
