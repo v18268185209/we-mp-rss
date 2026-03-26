@@ -143,7 +143,13 @@ class Wx:
                                 # 等待页面加载并验证切换成功
                                 page.wait_for_load_state("networkidle", timeout=10000)
                                 time.sleep(2)
-                                self.Call_Success(has_extdata=False)
+                                session_data = self.Call_Success(has_extdata=False)
+
+                                # 保存新的 token 和 cookie
+                                if session_data and session_data.get("token"):
+                                    from driver.token import set_token
+                                    set_token(session_data, self.ext_data)
+                                    print_success(f"已更新Token: {session_data.get('token')}")
 
                                 self.Token(isClose=False)
                                 print_success("账号切换成功")
