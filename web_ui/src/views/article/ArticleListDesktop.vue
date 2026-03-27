@@ -39,7 +39,7 @@
                 <a-radio value="all" style="flex: 1; text-align: center;">全部</a-radio>
               </a-radio-group>
             </div>
-            <a-list :data="filteredMpList" :loading="mpLoading" bordered>
+            <a-list :data="mpList" :loading="mpLoading" bordered>
               <template #item="{ item, index }">
                 <a-list-item @click="handleMpClick(item.id)" :class="{ 'active-mp': activeMpId === item.id }"
                   style="padding: 9px 8px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
@@ -284,7 +284,7 @@ const mpPagination = ref({
   showTotal: true,
   pageSizeOptions: [5, 10, 15]
 })
-const mpFilterType = ref('active') // 'active' | 'disabled' | 'all'
+const mpFilterType = ref('all') // 'active' | 'disabled' | 'all'
 const searchText = ref('')
 const filterStatus = ref('')
 const mpSearchText = ref('')
@@ -412,6 +412,12 @@ const handleMpSearch = () => {
   mpPagination.value.current = 1
   fetchMpList()
 }
+
+// 监听筛选类型变化，重置分页并重新请求
+watch(mpFilterType, () => {
+  mpPagination.value.current = 1
+  fetchMpList()
+})
 const rssFormat = ref('atom')
 const activeFeed = ref({
   id: "",
@@ -516,18 +522,6 @@ const fetchArticles = async () => {
   }
 }
 const issourceUrl = ref(false)
-
-// 过滤后的公众号列表
-const filteredMpList = computed(() => {
-  if (mpFilterType.value === 'all') {
-    return mpList.value
-  }
-  if (mpFilterType.value === 'disabled') {
-    return mpList.value.filter(item => item.status === 0)
-  }
-  // 'active' - 默认只显示启用的和"全部"选项
-  return mpList.value.filter(item => item.status !== 0 || item.id === '')
-})
 
 // 从 localStorage 读取 issourceUrl 值
 const initIssourceUrl = () => {
@@ -861,10 +855,20 @@ onMounted(() => {
 const fetchMpList = async () => {
   mpLoading.value = true
   try {
+    // 根据筛选类型确定 status 参数
+    let statusParam: number | undefined = undefined
+    if (mpFilterType.value === 'active') {
+      statusParam = 1
+    } else if (mpFilterType.value === 'disabled') {
+      statusParam = 0
+    }
+    // 'all' 时不传 status 参数
+
     const res = await getSubscriptions({
       page: mpPagination.value.current - 1,
       pageSize: mpPagination.value.pageSize,
-      kw: mpSearchText.value
+      kw: mpSearchText.value,
+      status: statusParam
     })
 
     mpList.value = res.list.map(item => ({
@@ -875,8 +879,8 @@ const fetchMpList = async () => {
       article_count: item.article_count || 0,
       status: item.status ?? 1
     }))
-    // 添加'全部'选项 - 只在没有搜索时显示
-    if (!mpSearchText.value) {
+    // 只在筛选全部且无搜索时添加'全部'选项
+    if (mpFilterType.value === 'all' && !mpSearchText.value) {
       mpList.value.unshift({
         id: '',
         name: '全部',
