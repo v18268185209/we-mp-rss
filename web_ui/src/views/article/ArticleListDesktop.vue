@@ -314,11 +314,62 @@ const statusColorMap = {
   deleted: 'red'
 }
 
+// 原创状态映射
+const copyrightTextMap: Record<number, string> = {
+  0: '否',
+  1: '是',
+  11: '是',
+  12: '是',
+  13: '是',
+  14: '是'
+}
+
+const copyrightColorMap: Record<number, string> = {
+  0: 'gray',
+  1: 'arcoblue',
+  11: 'arcoblue',
+  12: 'arcoblue',
+  13: 'arcoblue',
+  14: 'arcoblue'
+}
+
+// 展示类型映射
+const itemShowTypeTextMap: Record<number, string> = {
+  0: '图文',
+  1: '图片',
+  2: '音频',
+  3: '视频',
+  10: '纯文字',
+  11: '文字+图片'
+}
+
+const itemShowTypeColorMap: Record<number, string> = {
+  0: 'green',
+  1: 'purple',
+  2: 'orange',
+  3: 'red',
+  10: 'gray',
+  11: 'cyan'
+}
+
+// 发布类型映射
+const publishTypeTextMap: Record<number, string> = {
+  1: '发布',
+  2: '转载',
+  3: '草稿'
+}
+
+const publishTypeColorMap: Record<number, string> = {
+  1: 'green',
+  2: 'blue',
+  3: 'orange'
+}
+
 const columns = [
   {
     title: '已阅',
     dataIndex: 'is_read',
-    width: '100',
+    width: 70,
     render: ({ record }) => {
       const isRead = record.is_read === 1;
       return h('div', { 
@@ -342,7 +393,7 @@ const columns = [
   {
     title: '文章标题',
     dataIndex: 'title',
-    width: window.innerWidth - 1100,
+    width: window.innerWidth - 1200,
     ellipsis: true,
     render: ({ record }) => h('a', {
       href: issourceUrl.value ? record.url || '#' : "/views/article/" + record.id,
@@ -358,7 +409,7 @@ const columns = [
   {
     title: '公众号',
     dataIndex: 'mp_id',
-    width: '120',
+    width: 100,
     ellipsis: true,
     render: ({ record }) => {
       const mp = mpList.value.find(item => item.id === record.mp_id);
@@ -376,9 +427,22 @@ const columns = [
     }
   },
   {
+    title: '原创',
+    dataIndex: 'copyright_stat',
+    width: 70,
+    align: 'center',
+    render: ({ record }) => {
+      const stat = record.copyright_stat ?? 0
+      return h('a-tag', {
+        color: copyrightColorMap[stat] || 'gray',
+        size: 'small'
+      }, copyrightTextMap[stat] || '未知')
+    }
+  },
+  {
     title: '更新时间',
     dataIndex: 'created_at',
-    width: '140',
+    width: 130,
     render: ({ record }) => h('span',
       { style: { color: 'var(--color-text-3)', fontSize: '12px' } },
       formatDateTime(record.created_at)
@@ -387,7 +451,7 @@ const columns = [
   {
     title: '发布时间',
     dataIndex: 'publish_time',
-    width: '140',
+    width: 130,
     render: ({ record }) => h('span',
       { style: { color: 'rgb(var(--color-text-3))', fontSize: '12px' } },
       formatTimestamp(record.publish_time)
@@ -396,7 +460,7 @@ const columns = [
   {
     title: '操作',
     dataIndex: 'actions',
-    width: 180,
+    width: 160,
     align: 'center',
     slotName: 'actions'
   }
