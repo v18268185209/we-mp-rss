@@ -37,61 +37,177 @@ from core.models.message_task import MessageTask
 from .webhook import web_hook
 interval=int(cfg.get("interval",60)) # 每隔多少秒执行一次
 def do_job(mp=None,task:MessageTask=None,isTest=False):
+        """执行单个公众号的采集任务"""
         # TaskQueue.add_task(test,info=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         # print("执行任务", task.mps_id)
         print(f"执行任务 (测试模式: {isTest})")
-        all_count=0
-        if isTest:
-            # 测试模式使用模拟数据
-            mock_articles = [{
-                "id": "test-article-001",
-                "mp_id": mp.id,
-                "title": "测试文章标题",
-                "pic_url": "https://via.placeholder.com/300x200",
-                "url": "https://example.com/test-article",
-                "description": "这是一篇测试文章的描述内容，用于测试webhook功能是否正常。",
-                "publish_time": (datetime.now() - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S"),
-                "content": "<p>这是测试文章的正文内容。</p>"
-            }]
-            count = 1
-        else:
-            wx=WxGather().Model()
-            try:
-                wx.get_Articles(mp.faker_id,CallBack=UpdateArticle,Mps_id=mp.id,Mps_title=mp.mp_name, MaxPage=1,Over_CallBack=Update_Over,interval=interval)
-            except Exception as e:
-                print_error(e)
-                # raise
-            finally:
-                count=wx.all_count()
-                mock_articles = wx.articles
-                all_count+=count
-
-        from jobs.webhook import MessageWebHook
-        tms=MessageWebHook(task=task,feed=mp,articles=mock_articles)
-        web_hook(tms, is_test=isTest)
-        print_success(f"任务({task.id})[{mp.mp_name}]执行成功,{count}成功条数")
         
-        # 级联节点：上报任务执行结果到父节点
-        from jobs.cascade_sync import cascade_sync_service
-        if not isTest and mock_articles:
-            import asyncio
-            try:
-                result_data = [{
+        # 初始化变量，确保在所有分支中都有定义
+        count = 0
+        all_count = 0
+        mock_articles = []
+        success = False
+        error_msg = None
+        
+        try:
+            if isTest:
+                # 测试模式使用模拟数据
+                mock_articles = [{
+                    "id": "test-article-001",
                     "mp_id": mp.id,
-                    "mp_name": mp.mp_name,
-                    "article_count": len(mock_articles) if not isTest else 1,
-                    "success_count": count if not isTest else 1,
-                    "timestamp": datetime.now().isoformat()
+                    "title": "测试文章标题",
+                    "pic_url": "https://via.placeholder.com/300x200",
+                    "url": "https://example.com/test-article",
+                    "description": "这是一篇测试文章的描述内容，用于测试webhook功能是否正常。",
+                    "publish_time": (datetime.now() - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S"),
+                    "content": "<p>这是测试文章的正文内容。</p>"
                 }]
-                # 异步上报，不阻塞主流程
-                asyncio.create_task(cascade_sync_service.report_task_result(task.id, result_data))
+                count = 1
+                success = True
+            else:
+                wx=WxGather().Model()
+                try:
+                    wx.get_Articles(mp.faker_id,CallBack=UpdateArticle,Mps_id=mp.id,Mps_title=mp.mp_name, MaxPage=1,Over_CallBack=Update_Over,interval=interval)
+                    success = True
+                except Exception as e:
+                    print_error(f"获取文章失败 [{mp.mp_name}]: {e}")
+                    error_msg = str(e)
+                    # 不抛出异常，继续执行后续流程
+                finally:
+                    count = wx.all_count() if wx else 0
+                    mock_articles = wx.articles if wx else []
+                    all_count += count
+
+            # 执行 webhook 通知
+            try:
+                from jobs.webhook import MessageWebHook
+                tms=MessageWebHook(task=task,feed=mp,articles=mock_articles)
+                web_hook(tms, is_test=isTest)
+                print_success(f"任务({task.id})[{mp.mp_name}]执行成功,{count}成功条数")
             except Exception as e:
-                print_error(f"上报任务结果失败: {str(e)}")
+                print_error(f"Webhook执行失败 [{mp.mp_name}]: {e}")
+                if not error_msg:
+                    error_msg = f"Webhook: {str(e)}"
+            
+            # 级联节点：上报任务执行结果到父节点
+            from jobs.cascade_sync import cascade_sync_service
+            if not isTest and mock_articles:
+                import asyncio
+                try:
+                    result_data = [{
+                        "mp_id": mp.id,
+                        "mp_name": mp.mp_name,
+                        "article_count": len(mock_articles) if not isTest else 1,
+                        "success_count": count if not isTest else 1,
+                        "timestamp": datetime.now().isoformat()
+                    }]
+                    # 异步上报，不阻塞主流程
+                    asyncio.create_task(cascade_sync_service.report_task_result(task.id, result_data))
+                except Exception as e:
+                    print_error(f"上报任务结果失败: {str(e)}")
+                    
+        except Exception as e:
+            error_msg = str(e)
+            print_error(f"任务执行异常 [{mp.mp_name}]: {e}")
+            raise  # 重新抛出，让队列的重试机制处理
+        
+        finally:
+            # 记录执行结果到追踪器
+            if task and not isTest:
+                tracker.record_mp_result(
+                    task_id=task.id,
+                    mp_name=mp.mp_name,
+                    success=success and count > 0,
+                    article_count=count,
+                    error=error_msg
+                )
 
 from core.queue import TaskQueue
+
+# 任务执行追踪器
+import threading
+class MessageTaskTracker:
+    """消息任务执行追踪器"""
+    _instance = None
+    _lock = threading.Lock()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._tasks = {}
+                    cls._instance._task_lock = threading.Lock()
+        return cls._instance
+    
+    def start_task(self, task_id: str, total_mps: int) -> None:
+        """开始追踪一个消息任务"""
+        with self._task_lock:
+            self._tasks[task_id] = {
+                'total': total_mps,
+                'completed': 0,
+                'failed': 0,
+                'start_time': datetime.now().isoformat(),
+                'mp_results': []
+            }
+    
+    def record_mp_result(self, task_id: str, mp_name: str, success: bool, article_count: int = 0, error: str = None) -> None:
+        """记录单个公众号的执行结果"""
+        with self._task_lock:
+            if task_id not in self._tasks:
+                return
+            
+            task_info = self._tasks[task_id]
+            if success:
+                task_info['completed'] += 1
+            else:
+                task_info['failed'] += 1
+            
+            task_info['mp_results'].append({
+                'mp_name': mp_name,
+                'success': success,
+                'article_count': article_count,
+                'error': error,
+                'time': datetime.now().isoformat()
+            })
+            
+            # 打印进度
+            progress = task_info['completed'] + task_info['failed']
+            print_info(f"任务进度 [{task_id}]: {progress}/{task_info['total']} (成功:{task_info['completed']}, 失败:{task_info['failed']})")
+            
+            # 检查是否全部完成
+            if progress >= task_info['total']:
+                self._finish_task(task_id)
+    
+    def _finish_task(self, task_id: str) -> None:
+        """任务完成"""
+        if task_id not in self._tasks:
+            return
+        
+        task_info = self._tasks[task_id]
+        print_success(f"\n{'='*50}")
+        print_success(f"消息任务 [{task_id}] 执行完成!")
+        print_success(f"总计: {task_info['total']} 个公众号")
+        print_success(f"成功: {task_info['completed']} 个")
+        print_error(f"失败: {task_info['failed']} 个")
+        print_success(f"{'='*50}\n")
+    
+    def get_task_status(self, task_id: str) -> dict:
+        """获取任务状态"""
+        with self._task_lock:
+            return self._tasks.get(task_id, {})
+
+tracker = MessageTaskTracker()
+import threading
+
 def add_job(feeds:list[Feed]=None,task:MessageTask=None,isTest=False):
     if isTest:
         TaskQueue.clear_queue()
+    
+    # 初始化任务追踪
+    if task and not isTest:
+        tracker.start_task(task.id, len(feeds))
+    
     for feed in feeds:
         TaskQueue.add_task(do_job,feed,task,isTest)
         if isTest:

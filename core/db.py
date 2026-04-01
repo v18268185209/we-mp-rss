@@ -149,7 +149,11 @@ class Db:
             from core.timestamp import _to_unix_millis, _to_unix_seconds
             art.updated_at_millis = _to_unix_millis(art.updated_at_millis, original_updated_at) # type: ignore
             art.updated_at = _to_unix_seconds(art.updated_at) # type: ignore
-            art.content=art.content
+            
+            # 清理编码问题，确保存储的数据是合法的UTF-8
+            from tools.fix import sanitize_utf8
+            art.content = sanitize_utf8(art.content) if art.content else None # type: ignore
+            art.content_html = sanitize_utf8(art.content_html) if art.content_html else None # type: ignore
 
             if art.content_html is None:
                 from tools.fix import fix_html

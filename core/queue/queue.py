@@ -24,6 +24,8 @@ class TaskItem:
     args: tuple = field(default_factory=tuple)
     kwargs: dict = field(default_factory=dict)
     add_time: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    retry_count: int = 0  # 当前重试次数
+    max_retries: int = 3  # 最大重试次数
 
 class TaskQueueManager:
     """任务队列管理器，用于管理和执行排队任务"""
@@ -42,24 +44,36 @@ class TaskQueueManager:
         # 待执行任务列表（用于展示）
         self._pending_items: list[TaskItem] = []
         
-    def add_task(self, task: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
+    def add_task(self, task: Callable[..., Any], *args: Any, max_retries: int = 3, **kwargs: Any) -> bool:
         """添加任务到队列
         
         Args:
             task: 要执行的任务函数
             *args: 任务函数的参数
+            max_retries: 最大重试次数，默认3次
             **kwargs: 任务函数的关键字参数
+            
+        Returns:
+            bool: 是否成功添加到队列
         """
         with self._lock:
-            self._queue.put((task, args, kwargs))
+            # 检查队列是否已满（如果设置了maxsize）
+            try:
+                self._queue.put_nowait((task, args, kwargs, max_retries))
+            except queue.Full:
+                print_error(f"{self.tag}队列已满，任务添加失败")
+                return False
+                
             # 记录待执行任务
             task_name = getattr(task, '__name__', str(task))
             self._pending_items.append(TaskItem(
                 task_name=task_name,
                 args=args,
-                kwargs=kwargs
+                kwargs=kwargs,
+                max_retries=max_retries
             ))
         print_success(f"{self.tag}队列任务添加成功\n")
+        return True
     def run_task_background(self)->None:
         threading.Thread(target=self.run_tasks, daemon=True).start()  
         print_warning("队列任务后台运行")
@@ -79,7 +93,8 @@ class TaskQueueManager:
                 time.sleep(0.1)  # 避免过于频繁的任务获取 
                 try:
                     # 阻塞获取任务，避免CPU空转
-                    task, args, kwargs = self._queue.get(timeout=timeout)
+                    task_item = self._queue.get(timeout=timeout)
+                    task, args, kwargs, max_retries = task_item
                     
                     # 从待执行列表中移除
                     with self._lock:
@@ -94,46 +109,62 @@ class TaskQueueManager:
                             start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         )
                     
-                    try:
-                        # 记录任务开始时间
-                        start_time = time.time()
-                        task(*args, **kwargs)
-                        # 记录任务执行时间
-                        duration = time.time() - start_time
-                        
-                        # 更新当前任务记录
-                        with self._lock:
-                            if self._current_task:
-                                self._current_task.end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                self._current_task.duration = duration
-                                self._current_task.status = "completed"
-                        
-                        print_info(f"\n任务执行完成，耗时: {duration:.2f}秒")
-                    except Exception as e:
-                        # 更新当前任务记录为失败
-                        with self._lock:
-                            if self._current_task:
-                                self._current_task.end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                self._current_task.duration = time.time() - start_time
-                                self._current_task.status = "failed"
-                                self._current_task.error = str(e)
-                        
-                        print_error(f"队列任务执行失败: {e}")
-                        # raise
-                    finally:
-                        # 保存到历史记录
-                        with self._lock:
-                            if self._current_task:
-                                self._history.append(self._current_task)
-                                # 限制历史记录大小
-                                if len(self._history) > self._history_max_size:
-                                    self._history = self._history[-self._history_max_size:]
-                                self._current_task = None
-                        
-                        # 确保任务完成标记和资源释放
-                        self._queue.task_done()
-                        # 强制垃圾回收
-                        gc.collect()
+                    retry_count = 0
+                    success = False
+                    last_error = None
+                    
+                    while retry_count <= max_retries and not success:
+                        if retry_count > 0:
+                            print_warning(f"任务 [{task_name}] 第 {retry_count} 次重试...")
+                            time.sleep(2 ** retry_count)  # 指数退避
+                            
+                        try:
+                            # 记录任务开始时间
+                            start_time = time.time()
+                            task(*args, **kwargs)
+                            # 记录任务执行时间
+                            duration = time.time() - start_time
+                            
+                            # 更新当前任务记录
+                            with self._lock:
+                                if self._current_task:
+                                    self._current_task.end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                    self._current_task.duration = duration
+                                    self._current_task.status = "completed"
+                            
+                            print_info(f"\n任务执行完成，耗时: {duration:.2f}秒")
+                            success = True
+                            
+                        except Exception as e:
+                            last_error = e
+                            retry_count += 1
+                            
+                            if retry_count <= max_retries:
+                                print_warning(f"任务 [{task_name}] 执行失败: {e}，准备重试 ({retry_count}/{max_retries})")
+                            else:
+                                # 达到最大重试次数，记录失败
+                                with self._lock:
+                                    if self._current_task:
+                                        self._current_task.end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                        self._current_task.duration = time.time() - start_time
+                                        self._current_task.status = "failed"
+                                        self._current_task.error = str(e)
+                                
+                                print_error(f"任务 [{task_name}] 执行失败，已达到最大重试次数: {e}")
+                    
+                    # 保存到历史记录
+                    with self._lock:
+                        if self._current_task:
+                            self._history.append(self._current_task)
+                            # 限制历史记录大小
+                            if len(self._history) > self._history_max_size:
+                                self._history = self._history[-self._history_max_size:]
+                            self._current_task = None
+                    
+                    # 确保任务完成标记和资源释放
+                    self._queue.task_done()
+                    # 强制垃圾回收
+                    gc.collect()
                     
                 except queue.Empty:
                     # 超时无任务，继续检查运行状态

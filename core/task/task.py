@@ -156,7 +156,10 @@ class TaskScheduler:
                     trigger=trigger,
                     args=args,
                     kwargs=kwargs,
-                    id=str(job_id)
+                    id=str(job_id),
+                    max_instances=1,          # 同一任务最多1个实例
+                    coalesce=True,            # 错过的任务合并
+                    misfire_grace_time=300    # 5分钟宽限时间
                 )
                 self._jobs[job.id] = job
                 logger.info(f"Successfully added job {tag} {job.id}")
