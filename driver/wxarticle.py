@@ -461,13 +461,19 @@ class WXArticleFetcher:
         # return f"{base_url}/static/res/logo/{url}" 
         return f"{url}" 
     def get_description(self,content:str,length:int=200)->str:
-        soup = BeautifulSoup(content, 'html.parser')
-            # 找到内容
-        js_content_div = soup
-        if js_content_div is None:
+        # 防御性检查：确保 content 不是 None
+        if not content:
             return ""
-        content = js_content_div.get_text().strip().strip("\n").replace("\n"," ").replace("\r"," ")
-        return content[:length]+"..." if len(content)>length else content
+        try:
+            soup = BeautifulSoup(content, 'html.parser')
+            # 找到内容
+            js_content_div = soup
+            if js_content_div is None:
+                return ""
+            text = js_content_div.get_text().strip().strip("\n").replace("\n"," ").replace("\r"," ")
+            return text[:length]+"..." if len(text)>length else text
+        except Exception:
+            return ""
 
     def proxy_images(self,content:str)->str:
         # 防御性检查：确保 content 不是 None
