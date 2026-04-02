@@ -780,9 +780,16 @@ onUnmounted(() => {
 }
 
 @media (max-width: 600px) {
+  .task-queue-view {
+    padding: 8px;
+    height: auto;
+    min-height: calc(100vh - 100px);
+  }
+  
   .header-bar {
     flex-direction: column;
     gap: 8px;
+    padding: 8px 12px;
   }
   
   .header-right {
@@ -790,15 +797,41 @@ onUnmounted(() => {
     justify-content: flex-end;
   }
   
+  .queue-section {
+    margin-bottom: 0;
+  }
+  
   .queue-header {
     flex-wrap: wrap;
+    padding: 8px 10px;
+  }
+  
+  .queue-title {
+    font-size: 13px;
   }
   
   .queue-actions {
     width: 100%;
     margin-left: 0;
-    margin-top: 8px;
+    margin-top: 6px;
     justify-content: flex-end;
+  }
+  
+  .queue-content {
+    padding: 8px;
+    gap: 8px;
+  }
+  
+  .status-item .value {
+    font-size: 16px;
+  }
+  
+  .history-item .task-name {
+    max-width: 100px;
+  }
+  
+  .scheduler-item {
+    padding: 5px 8px;
   }
 }
 </style>
