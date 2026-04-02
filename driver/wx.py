@@ -242,15 +242,25 @@ class Wx:
             return False
         finally:
             # 确保锁被释放
-            setLockStatus(False)
+            try:
+                setLockStatus(False)
+            except Exception as e:
+                print_error(f"释放锁失败: {e}")
+            
             # 恢复任务队列
-            from core.queue import TaskQueue, ContentTaskQueue
-            if main_queue_was_running:
-                print_info("恢复主任务队列...")
-                TaskQueue.run_task_background()
-            if content_queue_was_running:
-                print_info("恢复内容任务队列...")
-                ContentTaskQueue.run_task_background() 
+            try:
+                from core.queue import TaskQueue, ContentTaskQueue
+                print_info(f"准备恢复队列: 主队列={main_queue_was_running}, 内容队列={content_queue_was_running}")
+                if main_queue_was_running:
+                    print_info("恢复主任务队列...")
+                    TaskQueue.run_task_background()
+                    print_success("主任务队列已恢复")
+                if content_queue_was_running:
+                    print_info("恢复内容任务队列...")
+                    ContentTaskQueue.run_task_background()
+                    print_success("内容任务队列已恢复")
+            except Exception as e:
+                print_error(f"恢复队列失败: {e}") 
     def GetCode(self,CallBack=None,Notice=None):
         self.Notice=Notice
         if  self.check_lock():

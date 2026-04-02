@@ -277,21 +277,24 @@ class WxGather:
     
     
     def Start(self,mp_id=None):
-        self.articles=[]
-        self.get_token()
-        from driver.success import getLockStatus
-        if getLockStatus():
-            self.Error("正在切换帐号码，请等待切换完成")
-            return
-        if self.token=="" or self.token is None:
-             self.Error("请先扫码登录公众号平台")
-             return
-        import time
-        self.start_time = time.time()  # 记录开始执行时间
-        self.update_mps(mp_id,Feed(
-          sync_time=int(time.time()),
-          update_time=int(time.time()),
-        ))
+        try:
+            self.articles=[]
+            self.get_token()
+            from driver.success import getLockStatus
+            if getLockStatus():
+                self.Error("正在切换帐号码，请等待切换完成")
+                return
+            if self.token=="" or self.token is None:
+                self.Error("请先扫码登录公众号平台")
+                return
+            import time
+            self.start_time = time.time()  # 记录开始执行时间
+            self.update_mps(mp_id,Feed(
+            sync_time=int(time.time()),
+            update_time=int(time.time()),
+            ))
+        except Exception as e:
+            print_error(f"开始采集失败: {e}")
 
     def Item_Over(self,item=None,CallBack=None):
         print(f"item end")
