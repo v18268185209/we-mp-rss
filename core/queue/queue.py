@@ -293,6 +293,15 @@ class TaskQueueManager:
             bool: 是否成功添加到队列
         """
         with self._thread_lock:
+            # 获取任务显示名称
+            display_name = task_name or getattr(task, '__name__', str(task))
+            
+            # 检查任务是否已在队列中（根据 task_name 去重）
+            for pending_item in self._pending_items:
+                if pending_item.task_name == display_name:
+                    print_warning(f"{self.tag}任务已在队列中，跳过 [{display_name}]")
+                    return False
+            
             # 检查队列是否已满（如果设置了maxsize）
             try:
                 # 将 task_name 存储在队列项中
@@ -302,7 +311,6 @@ class TaskQueueManager:
                 return False
                 
             # 记录待执行任务
-            display_name = task_name or getattr(task, '__name__', str(task))
             self._pending_items.append(TaskItem(
                 task_name=display_name,
                 args=args,

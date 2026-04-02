@@ -131,7 +131,7 @@
           :pagination="false"
           :stripe="true"
           size="mini"
-          :scroll="{ y: 180 }"
+          :scroll="{ y: 360 }"
           :loading="historyLoading"
         >
           <template #status="{ record }">

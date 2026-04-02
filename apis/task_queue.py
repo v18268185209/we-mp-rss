@@ -29,7 +29,7 @@ async def get_queue_status(
     """
     try:
         status = TaskQueue.get_detailed_status()
-        logger.info(f"Queue status: {status}")
+        # logger.info(f"Queue status: {status}")
         return success_response(data=status)
     except Exception as e:
         logger.error(f"Get queue status error: {str(e)}")
