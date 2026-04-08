@@ -14,6 +14,8 @@ from socket import timeout
 from urllib.parse import urlparse, unquote
 
 from core.print import print_error
+from driver.user_agent import UserAgentGenerator
+from driver.anti_crawler_config import AntiCrawlerConfig
 
 # 过滤 Playwright 已知的 memoryview 缓冲区警告
 # 这是 Playwright 在 Windows 上关闭浏览器时的已知问题
@@ -47,6 +49,7 @@ class PlaywrightController:
         self.context = None
         self.page = None
         self.isClose = True
+        self._anti_crawler = AntiCrawlerConfig()  # 反爬虫配置
 
     def _mask_proxy_url(self, proxy_url: str) -> str:
         if not proxy_url:
@@ -109,7 +112,7 @@ class PlaywrightController:
                 self.browser is not None and 
                 self.context is not None and 
                 self.page is not None)
-    def start_browser(self, headless=True, mobile_mode=False, dis_image=True, browser_name=browsers_name, language="zh-CN", anti_crawler=True, proxy_url=""):
+    def start_browser(self, headless=True, mobile_mode=True, dis_image=True, browser_name=browsers_name, language="zh-CN", anti_crawler=True, proxy_url=""):
         try:
             if  str(os.getenv("NOT_HEADLESS",False))=="True":
                 headless = False
@@ -199,7 +202,7 @@ class PlaywrightController:
             elif browser_name.lower() == "webkit":
                 # WebKit 浏览器参数（支持很少，保持最小化）
                 launch_options["args"] = []
-                # WebKit 的反爬虫功能主要通过 JavaScript 注入实现（在 _apply_anti_crawler_scripts 中）
+                # WebKit 的反爬虫功能主要通过 JavaScript 注入实现
             else:
                 # 默认使用 Chromium 配配置
                 launch_options["args"] = [
@@ -238,22 +241,21 @@ class PlaywrightController:
             
             # 反爬虫配置
             if anti_crawler:
-                context_options.update(self._get_anti_crawler_config(mobile_mode))
+                context_options.update(self._anti_crawler.get_anti_crawler_config(mobile_mode))
             
             self.context = self.browser.new_context(**context_options) #type: ignore
             self.page = self.context.new_page()
             
             if mobile_mode:
                 self.page.set_viewport_size({"width": 375, "height": 812})
-            # else:
-            #     self.page.set_viewport_size({"width": 1920, "height": 1080})
 
             if dis_image:
                 self.context.route("**/*.{png,jpg,jpeg}", lambda route: route.abort())
 
             # 应用反爬虫脚本
             if anti_crawler:
-                self._apply_anti_crawler_scripts()
+                self.page.add_init_script(self._anti_crawler.get_init_script())
+                self.page.evaluate(self._anti_crawler.get_behavior_script())
 
             self.isClose = False
             return self.page
@@ -286,261 +288,14 @@ class PlaywrightController:
         if self.context is None:
             raise Exception("浏览器未启动，请先调用 start_browser()")
         self.context.add_cookies(cookies)
+        
     def get_cookies(self):
         if self.context is None:
             raise Exception("浏览器未启动，请先调用 start_browser()")
         return self.context.cookies()
+    
     def add_cookie(self, cookie):
         self.add_cookies([cookie])
-
-
-    def _get_anti_crawler_config(self, mobile_mode=False):
-        """获取反爬虫配置"""
-        
-        # 生成随机指纹
-        fingerprint = self._generate_uuid()
-        
-        # 基础配置
-        config = {
-            "user_agent": self._get_realistic_user_agent(mobile_mode),
-            "viewport": {
-                "width": random.randint(1200, 1920) if not mobile_mode else 375,
-                "height": random.randint(800, 1080) if not mobile_mode else 812,
-                "device_scale_factor": random.choice([1, 1.25, 1.5, 2])
-            },
-            # 禁用用户特征
-            "java_script_enabled": True,
-            "ignore_https_errors": True,
-            "bypass_csp": True,  # 绕过 CSP 限制
-            "extra_http_headers": {
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Cache-Control": "no-cache",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Sec-Fetch-User": "?1",
-                # 禁用 Client Hints（移除特征头）
-                # "Sec-CH-UA": None,  # User-Agent Client Hints
-                # "Sec-CH-UA-Mobile": None,
-                # "Sec-CH-UA-Platform": None,
-            },
-            # 禁用 WebRTC（通过权限）
-            "permissions": [],  # 不授予任何权限
-        }
-        
-        # 移动端特殊配置
-        if mobile_mode:
-            config["extra_http_headers"].update({
-                "User-Agent": config["user_agent"],
-                "X-Requested-With": "com.tencent.mm"
-            })
-        
-        return config
-
-    def _get_realistic_user_agent(self, mobile_mode=False):
-        """获取更真实的User-Agent"""
-        print(f"浏览器特征设置完成: {'移动端' if mobile_mode else '桌面端'}")
-        if mobile_mode:
-            # 移动端User-Agent
-            mobile_agents = [
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
-                "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
-                "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
-                "Mozilla/5.0 (Windows Phone 10.0; Android 6.0.1; Microsoft; Lumia 950) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36 Edge/14.14393"
-            ]
-            return random.choice(mobile_agents)
-        else:
-            # 桌面端User-Agent（更新版本）
-            desktop_agents = [
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/120.0",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 OPR/106.0.0.0",
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            ]
-            return random.choice(desktop_agents)
-
-    def _generate_uuid(self):
-        """生成UUID指纹"""
-        return str(uuid.uuid4()).replace("-", "")
-
-    def _apply_anti_crawler_scripts(self):
-        """应用反爬虫脚本 - 禁用用户特征"""
-        # 隐藏自动化特征和禁用指纹
-        self.page.add_init_script("""
-        // ========== 禁用 WebDriver 检测 ==========
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => undefined,
-            configurable: true
-        });
-        
-        // ========== 禁用 Chrome 自动化标志 ==========
-        Object.defineProperty(navigator, 'plugins', {
-            get: () => {
-                const plugins = [
-                    { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
-                    { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
-                    { name: 'Native Client', filename: 'internal-nacl-plugin' }
-                ];
-                plugins.item = (i) => plugins[i] || null;
-                plugins.namedItem = (name) => plugins.find(p => p.name === name) || null;
-                plugins.refresh = () => {};
-                return plugins;
-            }
-        });
-        
-        Object.defineProperty(navigator, 'languages', {
-            get: () => ['zh-CN', 'zh', 'en-US', 'en']
-        });
-        
-        // ========== 禁用 WebRTC（防止 IP 泄露）==========
-        if (window.RTCPeerConnection) {
-            window.RTCPeerConnection = undefined;
-        }
-        if (window.webkitRTCPeerConnection) {
-            window.webkitRTCPeerConnection = undefined;
-        }
-        
-        // ========== 禁用 Canvas 指纹 ==========
-        const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-        HTMLCanvasElement.prototype.toDataURL = function(type) {
-            if (type === 'image/png' && this.width === 220 && this.height === 30) {
-                // 检测到指纹采集，返回空白
-                return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-            }
-            // 添加随机噪声
-            const context = this.getContext('2d');
-            if (context) {
-                const imageData = context.getImageData(0, 0, this.width, this.height);
-                for (let i = 0; i < imageData.data.length; i += 4) {
-                    imageData.data[i] ^= (Math.random() * 2) | 0;
-                }
-                context.putImageData(imageData, 0, 0);
-            }
-            return originalToDataURL.apply(this, arguments);
-        };
-        
-        // ========== 禁用 AudioContext 指纹 ==========
-        const audioContext = window.AudioContext || window.webkitAudioContext;
-        if (audioContext) {
-            const originalCreateAnalyser = audioContext.prototype.createAnalyser;
-            audioContext.prototype.createAnalyser = function() {
-                const analyser = originalCreateAnalyser.apply(this, arguments);
-                const originalGetFloatFrequencyData = analyser.getFloatFrequencyData;
-                analyser.getFloatFrequencyData = function(array) {
-                    // 返回随机噪声而非真实音频指纹
-                    for (let i = 0; i < array.length; i++) {
-                        array[i] = -100 + Math.random() * 50;
-                    }
-                };
-                return analyser;
-            };
-        }
-        
-        // ========== 禁用 WebGL 指纹 ==========
-        const getParameter = WebGLRenderingContext.prototype.getParameter;
-        WebGLRenderingContext.prototype.getParameter = function(parameter) {
-            if (parameter === 37445) return 'Intel Inc.';  // UNMASKED_VENDOR_WEBGL
-            if (parameter === 37446) return 'Intel Iris OpenGL Engine';  // UNMASKED_RENDERER_WEBGL
-            return getParameter.apply(this, arguments);
-        };
-        
-        if (typeof WebGL2RenderingContext !== 'undefined') {
-            const getParameter2 = WebGL2RenderingContext.prototype.getParameter;
-            WebGL2RenderingContext.prototype.getParameter = function(parameter) {
-                if (parameter === 37445) return 'Intel Inc.';
-                if (parameter === 37446) return 'Intel Iris OpenGL Engine';
-                return getParameter2.apply(this, arguments);
-            };
-        }
-        
-        // ========== 禁用字体指纹 ==========
-        const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
-        CanvasRenderingContext2D.prototype.measureText = function(text) {
-            const result = originalMeasureText.apply(this, arguments);
-            // 添加微小随机偏移
-            result.width += Math.random() * 0.1 - 0.05;
-            return result;
-        };
-        
-        // ========== 修改 permissions API ==========
-        const originalQuery = window.navigator.permissions.query;
-        window.navigator.permissions.query = (parameters) => (
-            parameters.name === 'notifications' ?
-                Promise.resolve({ state: Notification.permission }) :
-                originalQuery(parameters)
-        );
-        
-        // ========== 禁用 Battery API ==========
-        if (navigator.getBattery) {
-            navigator.getBattery = () => Promise.resolve({
-                charging: true,
-                chargingTime: 0,
-                dischargingTime: Infinity,
-                level: 1
-            });
-        }
-        
-        // ========== 禁用 Network Information API ==========
-        if (navigator.connection) {
-            Object.defineProperty(navigator, 'connection', {
-                get: () => ({
-                    effectiveType: '4g',
-                    downlink: 10,
-                    rtt: 50,
-                    saveData: false
-                })
-            });
-        }
-        
-        // ========== 隐藏自动化框架痕迹 ==========
-        delete window.__playwright;
-        delete window.__puppeteer;
-        delete window.__selenium;
-        delete window.__webdriver_evaluate;
-        delete window.__selenium_evaluate;
-        delete window.__fxdriver_evaluate;
-        delete window.__driver_unwrapped;
-        delete window.__webdriver_unwrapped;
-        delete window.__selenium_unwrapped;
-        delete window.__fxdriver_unwrapped;
-        delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
-        delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
-        delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
-        
-        console.log('[反检测] 用户特征保护已启用');
-        """)#type: ignore
-      
-        # 设置更真实的浏览器行为
-        self.page.evaluate("""
-        // 随机延迟点击事件
-        const originalAddEventListener = EventTarget.prototype.addEventListener;
-        EventTarget.prototype.addEventListener = function(type, listener, options) {
-            if (type === 'click') {
-                const wrappedListener = function(...args) {
-                    setTimeout(() => listener.apply(this, args), Math.random() * 100 + 50);
-                };
-                return originalAddEventListener.call(this, type, wrappedListener, options);
-            }
-            return originalAddEventListener.call(this, type, listener, options);
-        };
-        
-        // 随机化鼠标移动
-        document.addEventListener('mousemove', (e) => {
-            if (Math.random() > 0.7) {
-                e.stopImmediatePropagation();
-            }
-        }, true);
-        """) #type: ignore
-
-       
-
-   
 
     def __del__(self):
         # 析构时确保资源被释放
@@ -550,9 +305,9 @@ class PlaywrightController:
             # 析构函数中避免抛出异常
             pass
 
-    def open_url(self, url,wait_until="domcontentloaded"):
+    def open_url(self, url, wait_until="domcontentloaded"):
         try:
-            self.page.goto(url,wait_until=wait_until)
+            self.page.goto(url, wait_until=wait_until)
         except Exception as e:
             raise Exception(f"打开URL失败: {str(e)}")
 

@@ -154,7 +154,7 @@ const switchAccount = async () => {
   switching.value = true
   try {
     // 调用切换账号 API
-    const response = await fetch('/api/v1/wx/switch', {
+    const response = await fetch('/api/v1/wx/auth/switch', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
