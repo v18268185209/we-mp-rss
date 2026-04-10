@@ -54,10 +54,13 @@ try:
     warnings.filterwarnings("ignore", category=ResourceWarning)
     # 抑制 Playwright asyncio 警告(我们在独立线程中运行,可以安全忽略)
     warnings.filterwarnings("ignore", message=".*Playwright Sync API.*")
+    # 抑制所有 Playwright 相关警告
+    warnings.filterwarnings("ignore", module="playwright")
 except Exception:
     pass
 
-# 设置环境变量
+# 设置环境变量抑制 Playwright 警告
+os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', os.getenv("PLAYWRIGHT_BROWSERS_PATH", ""))
 browsers_name = os.getenv("BROWSER_TYPE", "firefox")
 browsers_path = os.getenv("PLAYWRIGHT_BROWSERS_PATH", "")
 os.environ['PLAYWRIGHT_BROWSERS_PATH'] = browsers_path
@@ -476,8 +479,22 @@ class PlaywrightController:
                 if not hasattr(PlaywrightController._thread_local, 'driver') or \
                    PlaywrightController._thread_local.driver is None:
                     # 在独立线程中启动 Playwright,避免 asyncio 冲突
-                    PlaywrightController._thread_local.driver = sync_playwright().start()
-                    print(f"Playwright driver 已为线程 {thread_id} 初始化")
+                    try:
+                        PlaywrightController._thread_local.driver = sync_playwright().start()
+                        print(f"Playwright driver 已为线程 {thread_id} 初始化")
+                    except Exception as e:
+                        error_msg = str(e)
+                        # 如果是 asyncio 相关错误,尝试继续
+                        if "asyncio" in error_msg.lower() or "sync api" in error_msg.lower():
+                            print(f"忽略 Playwright asyncio 检测错误,继续执行")
+                            # 重新尝试启动
+                            if sys.platform == "win32":
+                                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+                            PlaywrightController._thread_local.driver = sync_playwright().start()
+                            print(f"Playwright driver 已为线程 {thread_id} 初始化(重试成功)")
+                        else:
+                            # 其他错误正常抛出
+                            raise
                 
                 # 使用 RefCountManager 管理引用计数
                 ref_count = PlaywrightController._ref_count_manager.increment(thread_id)

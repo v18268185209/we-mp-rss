@@ -361,7 +361,7 @@ class WXArticleFetcher:
                         # 等待按钮可见,最多等待5秒
                         try:
                             button.first.wait_for(state="visible", timeout=5000)
-                            button.first.click()
+                            page.touchscreen.tap(button.first.bounding_box().x + 10, button.first.bounding_box().y + 10)
                             time.sleep(2)  # 等待内容加载
                             print_info("成功点击阅读原文按钮")
                         except Exception as e:
