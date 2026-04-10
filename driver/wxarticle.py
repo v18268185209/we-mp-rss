@@ -66,16 +66,16 @@ class WXArticleFetcher:
                     raise Exception("违规无法查看")
                     
                 # 处理"轻触阅读原文"按钮
-                if "轻触阅读原文" in body:
-                    try:
-                        button = page.locator('text=轻触阅读原文')
-                        button_count = await button.count()
-                        if button_count > 0:
-                            await button.first.wait_for(state="visible", timeout=1000)
-                            await button.first.click()
-                            await asyncio.sleep(2)
-                    except Exception as e:
-                        print_warning(f"阅读原文按钮处理失败: {str(e)}")
+                # if "轻触阅读原文" in body:
+                #     try:
+                #         button = page.locator('text=轻触阅读原文')
+                #         button_count = await button.count()
+                #         if button_count > 0:
+                #             await button.first.wait_for(state="visible", timeout=1000)
+                #             await button.first.click()
+                #             await asyncio.sleep(2)
+                #     except Exception as e:
+                #         print_warning(f"阅读原文按钮处理失败: {str(e)}")
                         
                 # 获取文章信息
                 title = await page.locator('meta[property="og:title"]').get_attribute("content")
@@ -119,7 +119,7 @@ class WXArticleFetcher:
         """
         try:
             # 尝试从 meta 标签获取
-            publish_time_str = await page.locator('meta[property="article:published_time"]').get_attribute("content")
+            publish_time_str = await page.locator('#publish_time').text_content()
             
             if publish_time_str:
                 return self._convert_publish_time_to_timestamp(publish_time_str)
@@ -149,8 +149,17 @@ class WXArticleFetcher:
     def _convert_publish_time_to_timestamp(self, publish_time_str: str) -> int:
         """
         将发布时间字符串转换为时间戳
+        支持 "2026年4月9日 22:44" 等中文日期格式（月份/日期可以是单位数）
         """
         try:
+            # 预处理：补零对齐中文日期中的单位数月份和日期
+            # 例如 "2026年4月9日 22:44" -> "2026年04月09日 22:44"
+            normalized_str = re.sub(
+                r'(\d{4})年(\d{1,2})月(\d{1,2})日',
+                lambda m: f"{m.group(1)}年{m.group(2).zfill(2)}月{m.group(3).zfill(2)}日",
+                publish_time_str
+            )
+            
             formats = [
                 "%Y-%m-%d %H:%M:%S",
                 "%Y年%m月%d日 %H:%M",
@@ -165,13 +174,13 @@ class WXArticleFetcher:
                     if fmt == "%m月%d日":
                         current_date = datetime.now()
                         current_year = current_date.year
-                        full_time_str = f"{current_year}年{publish_time_str}"
+                        full_time_str = f"{current_year}年{normalized_str}"
                         dt = datetime.strptime(full_time_str, "%Y年%m月%d日")
                         
                         if dt > current_date:
                             dt = dt.replace(year=current_year - 1)
                     else:
-                        dt = datetime.strptime(publish_time_str, fmt)
+                        dt = datetime.strptime(normalized_str, fmt)
                     return int(dt.timestamp())
                 except ValueError:
                     continue
