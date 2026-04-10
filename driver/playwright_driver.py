@@ -123,14 +123,21 @@ class PlaywrightController:
             browser_launcher = getattr(self._playwright, self.browser_type)
 
             # 启动浏览器
+            # 注意：不同浏览器支持的参数不同
+            # - Chromium: 支持 --disable-blink-features, --disable-dev-shm-usage
+            # - Firefox: 不支持这些参数
+            # - WebKit: 不支持这些参数
             launch_options = {
                 "headless": self.headless,
-                "args": [
+            }
+
+            # 只为 Chromium 添加特定参数
+            if self.browser_type == "chromium":
+                launch_options["args"] = [
                     "--disable-blink-features=AutomationControlled",
                     "--disable-dev-shm-usage",
                     "--no-sandbox",
                 ]
-            }
 
             # 添加代理
             if self.proxy_url:
