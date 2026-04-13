@@ -46,7 +46,7 @@
                   <div style="display: flex; align-items: center;">
                     <img :src="Avatar(item.avatar)" width="40" style="float:left;margin-right:1rem;" />
                     <a-typography-text strong style="line-height:32px;" :style="{ opacity: item.status === 0 ? 0.5 : 1 }">
-                      {{ item.name || item.mp_name }}
+                      {{ (item.name || item.mp_name).length > 8 ? (item.name || item.mp_name).substring(0, 8) + '...' : (item.name || item.mp_name) }}
                     </a-typography-text>
                     <a-button v-if="activeMpId === item.id && canManageMp(item.id)" size="mini" type="text" status="danger"
                       @click="$event.stopPropagation(); deleteMp(item.id)">
@@ -355,7 +355,7 @@ const exportModal = ref()
 const selectedRowKeys = ref([])
 const mpPagination = ref({
   current: 1,
-  pageSize: 8,
+  pageSize: 10,
   total: 0,
   showPageSize: false,
   showJumper: false,
@@ -1228,7 +1228,7 @@ const fetchMpList = async () => {
 
     // 选择"全部"时，请求少2条（因为会添加"全部"选项，后端也会添加"精选文章"）
     const adjustedPageSize = mpFilterType.value === 'all' && !mpSearchText.value
-      ? mpPagination.value.pageSize - 2
+      ? mpPagination.value.pageSize - 1
       : mpPagination.value.pageSize
 
     const res = await getSubscriptions({
