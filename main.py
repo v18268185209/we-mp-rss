@@ -75,6 +75,14 @@ if __name__ == '__main__':
         print_success("已开启自动修正文章任务")
     else:
         print_warning("未开启自动修正文章任务")
+    
+    # 启动文章统计定时刷新任务
+    if cfg.get("article_stats_refresh_enabled", True):  # 默认启用
+        from jobs.mps import start_article_stats_refresh
+        start_article_stats_refresh()
+    else:
+        print_warning("文章统计定时刷新任务未启用")
+    
     print("启动服务器")
     AutoReload=cfg.get("server.auto_reload",False)
     thread=cfg.get("server.threads",1)

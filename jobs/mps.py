@@ -281,6 +281,24 @@ def start_fix_article():
       #开启自动同步未同步 文章任务
     from jobs.fetch_no_article import start_sync_content
     start_sync_content()
+
+def start_article_stats_refresh():
+    """启动文章统计定时刷新任务"""
+    from core.article_lax import refresh_article_info
+    from core.config import cfg
+    
+    # 获取刷新间隔,默认5分钟
+    refresh_interval = int(cfg.get("article_stats_refresh_interval", 300))
+    
+    # 添加定时任务,每隔指定时间刷新一次文章统计
+    scheduler.add_cron_job(
+        refresh_article_info,
+        cron_expr=f"*/{refresh_interval // 60} * * * *",  # 每 N 分钟执行一次
+        job_id="article_stats_refresh",
+        tag="文章统计刷新"
+    )
+    print_success(f"文章统计定时刷新任务已启动,间隔: {refresh_interval}秒")
+
 if __name__ == '__main__':
     # do_job()
     # start_all_task()
