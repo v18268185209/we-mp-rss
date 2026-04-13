@@ -142,7 +142,8 @@ class WXArticleFetcher:
                 content = await page.locator('#js_content').inner_html()
                 if not content:
                     content = await page.locator('#js_article').inner_html()
-
+                
+                content=Web.clean_article_content(str(content))
                 # 更新基本信息
                 info["title"] = title or ""
                 info["author"] = author or ""

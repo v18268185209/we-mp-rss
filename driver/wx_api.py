@@ -779,20 +779,65 @@ class WeChatAPI:
                     self.session.cookies.update(cookies)
                     self.cookies = cookies
                 
+                # 验证token是否有效
+                if not token or token == "":
+                    print_warning("Token为空，请先登录")
+                    return False
+                
                 # 验证登录状态
                 response = self.session.get(f"{self.home_url}?token={token}")
                 response.raise_for_status()
-                if token=="" or token is None:
-                    print_warning("未登录，请扫码")
+                
+                # 严谨的登录成功判断
+                # 1. 检查HTTP状态码
+                if response.status_code != 200:
+                    print_warning(f"登录验证失败，HTTP状态码: {response.status_code}")
                     return False
-               
-                if 'home'  in response.url:
-                    self.is_logged_in = True
-                    print_success("Token登录成功")
-                    return self._handle_login_success()
-                else:
-                    print_warning("Token登录失败")
+                
+                # 2. 检查URL重定向
+                if 'home' not in response.url:
+                    print_warning(f"Token登录失败，重定向到: {response.url}")
                     return False
+                
+                # 3. 检查响应内容是否包含登录成功的关键标识
+                # 微信公众平台首页通常包含特定的标识
+                content = response.text
+                login_indicators = [
+                    'wx_app_name',  # 公众号名称
+                    'user_name',    # 用户名
+                    'nick_name',    # 昵称
+                    'head_img',     # 头像
+                    'account_list', # 账号列表
+                    'data_ticket',  # 数据票据
+                ]
+                
+                # 检查是否包含至少一个登录成功标识
+                has_login_indicator = any(indicator in content for indicator in login_indicators)
+                
+                # 4. 检查是否包含登录失败标识
+                fail_indicators = [
+                    '请重新登录',
+                    '登录超时',
+                    'session过期',
+                    'invalid session',
+                    '请扫码登录',
+                    'loginpage',  # 登录页面
+                ]
+                has_fail_indicator = any(indicator in content for indicator in fail_indicators)
+                
+                # 综合判断
+                if has_fail_indicator:
+                    print_warning("检测到登录失败标识，Token已失效")
+                    return False
+                
+                if not has_login_indicator:
+                    print_warning("未检测到登录成功标识，Token可能已失效")
+                    return False
+                
+                # 所有检查通过，确认登录成功
+                self.is_logged_in = True
+                print_success("Token登录成功")
+                return self._handle_login_success()
                     
         except Exception as e:
             print_error(f"Token登录失败: {str(e)}")
