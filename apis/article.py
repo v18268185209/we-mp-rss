@@ -452,7 +452,7 @@ async def get_articles(
 
         # 构建查询条件 - 使用 Article 模型（包含 content 字段）
         query = session.query(
-            Article,
+            ArticleBase,
             case(
                 ((Article.content.isnot(None)) & (Article.content != ''), 1),
                 else_=0
@@ -661,7 +661,13 @@ async def delete_article(
         if cfg.get("article.true_delete", False):
             session.delete(article)
         session.commit()
-        
+
+        # 清理缓存，确保已删除的文章不会继续显示
+        clear_cache_pattern("articles_list")
+        clear_cache_pattern("article_detail")
+        clear_cache_pattern("home_page")
+        clear_cache_pattern("tag_detail")
+
         return success_response(None, message="文章已标记为删除")
     except Exception as e:
         session.rollback()

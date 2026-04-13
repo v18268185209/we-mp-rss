@@ -28,9 +28,11 @@ def laxArticle():
     info = ArticleInfo()
     session = DB.get_session()
     try:
-        # 获取没有内容的文章数量 - 只查询content字段，排除已删除的文章
+        # 获取没有内容的文章数量 - 同时检查 content 和 content_html 字段，排除已删除的文章
         info.no_content_count = session.query(Article).filter(
-            ((Article.content == None) | (Article.content == '')) & (Article.status != DATA_STATUS.DELETED)
+            ((Article.content == None) | (Article.content == '')) &
+            ((Article.content_html == None) | (Article.content_html == '')) &
+            (Article.status != DATA_STATUS.DELETED)
         ).count()
         # 所有文章数量 - 只查询id字段，排除已删除的文章
         info.all_count = session.query(Article.id).filter(Article.status != DATA_STATUS.DELETED).count()
