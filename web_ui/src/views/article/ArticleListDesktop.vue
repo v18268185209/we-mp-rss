@@ -394,12 +394,12 @@ const featuredArticleUrl = ref('')
 
 const pagination = ref({
   current: 1,
-  pageSize: 8,
+  pageSize: 10,
   total: 0,
   showTotal: true,
   showJumper: true,
   showPageSize: true,
-  pageSizeOptions: [8,10, 20, 50, 100]
+  pageSizeOptions: [10, 20, 50, 100]
 })
 
 const statusTextMap = {
@@ -467,7 +467,6 @@ const publishTypeColorMap: Record<number, string> = {
 
 // 列配置选项
 const allColumnOptions = [
-  { key: 'is_read', label: '已阅', required: true },
   { key: 'pic_url', label: '题图', required: false },
   { key: 'title', label: '文章标题', required: true },
   { key: 'mp_id', label: '公众号', required: false },
@@ -480,7 +479,7 @@ const allColumnOptions = [
 ]
 
 // 默认显示的列
-const defaultVisibleColumns = ['is_read', 'pic_url', 'title', 'mp_id', 'created_at', 'publish_time', 'actions']
+const defaultVisibleColumns = ['pic_url', 'title', 'mp_id', 'created_at', 'publish_time', 'actions']
 
 // 从 localStorage 读取列配置
 const getStoredColumns = (): string[] => {
@@ -518,8 +517,8 @@ const columns = computed(() => {
     {
       title: '题图',
       dataIndex: 'pic_url',
-      width: 80,
-      align: 'center',
+      width: 30,
+      align: 'left',
       render: ({ record }) => {
         if (!record.pic_url) return h('span', { style: { color: 'var(--color-text-4)' } }, '-')
         const Popover = resolveComponent('a-popover')
@@ -531,73 +530,104 @@ const columns = computed(() => {
           default: () => h('img', {
             src: record.pic_url,
             style: {
-              width: '60px',
-              height: '40px',
+              width: '30px',
               objectFit: 'cover',
               borderRadius: '4px',
-              cursor: 'pointer'
+              aspectRatio: '1/1',
+              cursor: 'pointer',
             },
             onClick: () => viewArticle(record)
           }),
-          content: () => h('img', {
-            src: record.pic_url,
+          content: () => h('div', {
             style: {
               maxWidth: '300px',
-              maxHeight: '200px',
-              borderRadius: '4px'
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
             }
-          })
+          }, [
+            h('img', {
+              src: record.pic_url,
+              style: {
+                width: '100%',
+                borderRadius: '4px',
+                aspectRatio: '16/9',
+                objectFit: 'cover'
+              }
+            }),
+            h('div', {
+              style: {
+                fontSize: '12px',
+                color: 'var(--color-text-2)',
+                lineHeight: '1.4',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical'
+              }
+            }, record.title || ''),
+            h('div', {
+              style: {
+                fontSize: '11px',
+                color: 'var(--color-text-3)',
+                display: 'flex',
+                justifyContent: 'space-between'
+              }
+            }, [
+              h('span', {}, formatTimestamp(record.publish_time) || ''),
+            ])
+          ])
         })
-      }
-    },
-       {
-      title: '已阅',
-      dataIndex: 'is_read',
-      width: 10,
-      render: ({ record }) => {
-        const isRead = record.is_read === 1;
-        return h('div', {
-          style: {
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            color: isRead ? '#52c41a' : 'var(--color-text-3)'
-          },
-          onClick: () => toggleReadStatus(record)
-        }, [
-          h(isRead ? IconCheck : IconClose, {
-            style: { marginRight: '2px' }
-          }),
-          h('span', {
-            style: { fontSize: '12px' }
-          }, isRead ? '' : '')
-        ]);
       }
     },
     {
       title: '文章标题',
       dataIndex: 'title',
-      width: 120,
+      width: 180,
       ellipsis: true,
       tooltip: true,
       render: ({ record }) => {
         const title = record.title || ''
         const displayTitle = title.length > 30 ? title.slice(0, 30) + '...' : title
-        return h('a', {
-          href: issourceUrl.value ? record.url || '#' : "/views/article/" + record.id,
-          title: record.title,
-          target: '_blank',
+        const isRead = record.is_read === 1
+        return h('div', {
           style: {
-            color: 'var(--color-text-1)',
-            textDecoration: record.is_read === 1 ? 'line-through' : 'none',
-            opacity: record.is_read === 1 ? 0.7 : 1,
-            display: 'block',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
           }
-        }, displayTitle)
+        }, [
+          h('span', {
+            style: {
+              cursor: 'pointer',
+              color: isRead ? '#52c41a' : 'var(--color-text-3)',
+              flexShrink: 0
+            },
+            onClick: (e: MouseEvent) => {
+              e.preventDefault()
+              e.stopPropagation()
+              toggleReadStatus(record)
+            }
+          }, [
+            h(isRead ? IconCheck : IconClose)
+          ]),
+          h('a', {
+            href: issourceUrl.value ? record.url || '#' : "/views/article/" + record.id,
+            title: record.title,
+            target: '_blank',
+            style: {
+              color: 'var(--color-text-1)',
+              textDecoration: isRead ? 'line-through' : 'none',
+              opacity: isRead ? 0.7 : 1,
+              display: 'block',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              flex: 1
+            }
+          }, displayTitle)
+        ])
       }
     },
     {
