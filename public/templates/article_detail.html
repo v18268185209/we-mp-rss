@@ -30,9 +30,7 @@
     <!-- 公众号信息 -->
     <div class="mp-info">
         <div style="width: 48px; height: 48px; background: #e9ecef; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
-            {% if article.mp_cover %}
-                <img src="{{article.mp_cover}}" alt="{{article.title}}" width="50px"/> 
-            {% endif %}
+                <img src="{{article.mp_cover or '/static/logo.svg'}}" alt="{{article.title}}" width="50px"/> 
         </div>
         <div style="flex: 1;">
             <div style="font-weight: 500; font-size: 1.1rem;">

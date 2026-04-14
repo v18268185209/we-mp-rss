@@ -59,7 +59,7 @@ def _ensure_featured_feed(session):
     featured_feed = Feed(
         id=FEATURED_MP_ID,
         mp_name=FEATURED_MP_NAME,
-        mp_cover="logo.svg",
+        mp_cover="",
         mp_intro=FEATURED_MP_INTRO,
         status=1,
         sync_time=0,

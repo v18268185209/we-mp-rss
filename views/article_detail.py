@@ -96,7 +96,7 @@ async def article_detail_view(
             "content": processed_content,
             "mp_name": feed.mp_name if feed else "未知公众号",
             "mp_id": article.mp_id,
-            "mp_cover": feed.mp_cover if feed else "",
+            "mp_cover": feed.mp_cover if feed else "/static/logo.png",
             "mp_intro": feed.mp_intro if feed else "",
         }
         
