@@ -18,11 +18,20 @@ from core.cache import cache_view, clear_cache_pattern, data_cache
 from sqlalchemy.orm import defer
 # 创建路由器
 router = APIRouter(tags=["文章详情"])
+@router.get("/article/print/{article_id}", response_class=HTMLResponse, summary="文章打印页")
+@cache_view("article_detail", ttl=1)  
+async def print(
+    request: Request,
+    article_id: str,
+):
+    return article_detail_view(request, article_id, isprint=True)
+router = APIRouter(tags=["文章详情"])
 @router.get("/article/{article_id}", response_class=HTMLResponse, summary="文章详情页")
 @cache_view("article_detail", ttl=1)  # 缓存1小时
 async def article_detail_view(
     request: Request,
-    article_id: str
+    article_id: str,
+    isprint:bool=False
 ):
     """
     文章详情页面
@@ -107,7 +116,10 @@ async def article_detail_view(
         ]
         
         # 读取模板文件
+            
         template_path=base.article_detail_template
+        if isprint:
+            template_content=base.article_detail_print_template
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
