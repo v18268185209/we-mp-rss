@@ -38,6 +38,9 @@
 - Windows 平台自动使用 ProactorEventLoop 以支持子进程
 - 首次使用需要安装 playwright 浏览器：playwright install chromium
 - 默认使用无头模式，可通过 headless=False 显示浏览器窗口
+- PDF 生成支持所有浏览器：
+  * Chromium: 使用原生 PDF 生成 API（推荐）
+  * Firefox/WebKit: 使用截图拼接方式生成 PDF（需要安装 Pillow: pip install Pillow）
 """
 import asyncio
 import sys
@@ -109,6 +112,94 @@ class WebToPDFConverter:
         browser = await self._ensure_browser()
         self._context = await browser.new_context(**kwargs)
         return self._context
+    
+    async def _generate_pdf_from_screenshots(
+        self,
+        page: Page,
+        output_path: str,
+        pdf_options: Dict[str, Any]
+    ) -> None:
+        """
+        使用截图方式为 Firefox/WebKit 生成 PDF
+        
+        Args:
+            page: Playwright 页面对象
+            output_path: 输出 PDF 路径
+            pdf_options: PDF 选项
+        """
+        try:
+            from PIL import Image
+            import io
+            
+            logging.info(f"使用截图模式生成 PDF (浏览器: {self.browser_type})")
+            
+            # 获取页面尺寸
+            viewport = page.viewport_size
+            page_width = viewport['width'] if viewport else 1280
+            
+            # 获取页面总高度
+            total_height = await page.evaluate("document.body.scrollHeight")
+            
+            # 设置截图高度（每次截图的最大高度）
+            screenshot_height = 10000  # 每次最多截图 10000px
+            screenshots = []
+            
+            # 分段截图
+            current_y = 0
+            while current_y < total_height:
+                # 滚动到指定位置
+                await page.evaluate(f"window.scrollTo(0, {current_y})")
+                await page.wait_for_timeout(500)
+                
+                # 计算本次截图的高度
+                remaining_height = total_height - current_y
+                clip_height = min(screenshot_height, remaining_height)
+                
+                # 截图
+                screenshot = await page.screenshot(
+                    clip={
+                        'x': 0,
+                        'y': current_y,
+                        'width': page_width,
+                        'height': clip_height
+                    },
+                    type='png'
+                )
+                
+                # 转换为 PIL Image
+                img = Image.open(io.BytesIO(screenshot))
+                screenshots.append(img)
+                
+                current_y += clip_height
+            
+            # 合并所有截图
+            if screenshots:
+                # 计算总高度
+                total_img_height = sum(img.height for img in screenshots)
+                
+                # 创建新图像
+                merged_img = Image.new('RGB', (page_width, total_img_height), 'white')
+                
+                # 粘贴所有截图
+                y_offset = 0
+                for img in screenshots:
+                    merged_img.paste(img, (0, y_offset))
+                    y_offset += img.height
+                
+                # 转换为 PDF
+                merged_img.save(output_path, 'PDF', resolution=100.0)
+                logging.info(f"截图 PDF 已生成: {output_path}")
+            else:
+                raise ValueError("未能生成任何截图")
+                
+        except ImportError:
+            raise ImportError(
+                "使用 Firefox/WebKit 生成 PDF 需要 Pillow 库。"
+                "请安装: pip install Pillow"
+            )
+        except Exception as e:
+            logging.error(f"截图生成 PDF 失败: {e}")
+            raise
     
     async def _scroll_page_to_load_images(self, page: Page) -> None:
         """
@@ -248,7 +339,12 @@ class WebToPDFConverter:
                 output_file.parent.mkdir(parents=True, exist_ok=True)
                 
                 # 生成 PDF
-                await page.pdf(path=output_path, **default_pdf_options)
+                if self.browser_type == "chromium":
+                    # Chromium 支持原生 PDF 生成
+                    await page.pdf(path=output_path, **default_pdf_options)
+                else:
+                    # Firefox 和 WebKit 使用截图方式生成 PDF
+                    await self._generate_pdf_from_screenshots(page, output_path, default_pdf_options)
                 
                 logging.info(f"PDF 已生成: {output_path}")
                 return True
@@ -318,7 +414,12 @@ class WebToPDFConverter:
                 output_file.parent.mkdir(parents=True, exist_ok=True)
                 
                 # 生成 PDF
-                await page.pdf(path=output_path, **default_pdf_options)
+                if self.browser_type == "chromium":
+                    # Chromium 支持原生 PDF 生成
+                    await page.pdf(path=output_path, **default_pdf_options)
+                else:
+                    # Firefox 和 WebKit 使用截图方式生成 PDF
+                    await self._generate_pdf_from_screenshots(page, output_path, default_pdf_options)
                 
                 logging.info(f"PDF 已生成: {output_path}")
                 return True
@@ -569,7 +670,7 @@ if __name__ == "__main__":
         pdf_file="./data/test.pdf"
         success = url_to_pdf("http://192.168.100.58:8001/views/print/FEATURED_ARTICLES-CFyDBjG1qwm3YtyL8kkR7g", pdf_file)
         from pdf_extractor import pdf_to_docx
-        pdf_to_docx(pdf_file,f"{pdf_file.replace('.pdf','.docx')}")
+        pdf_to_docx(pdf_file,f"{pdf_file.replace('.pdf','.docx')}",browser_type="webkit")
         if success:
             print("✓ PDF 转换成功！")
         else:

@@ -86,7 +86,9 @@ def process_single_article(art, add_title, remove_images, remove_links, export_m
             try:
                 from tools.mdtools.pdf import url_to_pdf
                 pdf_full_path = f"{docx_path}{pdf_filename}"
-                url_to_pdf(art.url, pdf_full_path)
+                from core.config import cfg
+                browser_type = cfg.get("gather.browser_type", "webkit")
+                url_to_pdf(art.url, pdf_full_path, browser_type=browser_type)
                 
                 # 验证PDF文件是否生成
                 if not os.path.exists(pdf_full_path):
