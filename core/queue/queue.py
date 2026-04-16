@@ -340,6 +340,8 @@ class TaskQueueManager:
         Returns:
             bool: 是否成功添加到队列
         """
+        broadcast_needed = False
+        
         with self._thread_lock:
             # 获取任务显示名称
             display_name = task_name or getattr(task, '__name__', str(task))
@@ -370,7 +372,11 @@ class TaskQueueManager:
             self._save_pending_to_redis()
             self._save_status_to_redis()
             
-            # 广播队列状态更新
+            # 标记需要广播，但不在这里执行（避免在锁内进行异步操作）
+            broadcast_needed = True
+            
+        # 在锁外执行广播，避免阻塞 FastAPI 的事件循环
+        if broadcast_needed:
             _broadcast_queue_status()
             
         # print_success(f"{self.tag}队列任务添加成功 [{display_name}]\n")
@@ -567,16 +573,22 @@ class TaskQueueManager:
     
     def clear_history(self) -> None:
         """清空任务历史记录"""
+        broadcast_needed = False
         with self._thread_lock:
             self._history.clear()
             self._clear_history_from_redis()
             self._save_status_to_redis()
-            # 广播队列状态更新
+            # 标记需要广播，但不在这里执行
+            broadcast_needed = True
+        
+        # 在锁外执行广播
+        if broadcast_needed:
             _broadcast_queue_status()
-            print_success("任务历史记录已清空")
+        print_success("任务历史记录已清空")
             
     def clear_queue(self) -> None:
         """清空队列中的所有任务"""
+        broadcast_needed = False
         with self._thread_lock:
             while not self._queue.empty():
                 try:
@@ -587,9 +599,13 @@ class TaskQueueManager:
             self._pending_items.clear()
             self._save_pending_to_redis()
             self._save_status_to_redis()
-            # 广播队列状态更新
+            # 标记需要广播，但不在这里执行
+            broadcast_needed = True
+        
+        # 在锁外执行广播
+        if broadcast_needed:
             _broadcast_queue_status()
-            print_success("队列已清空")
+        print_success("队列已清空")
             
     def delete_queue(self) -> None:
         """删除队列(停止并清空所有任务)"""
