@@ -157,9 +157,11 @@ class Db:
                     and existing_article.status!=DATA_STATUS.DELETED \
                     and art.title==existing_article.title: # type: ignore
                         return False
-                    if art.content_html:# type: ignore
+                    art.content=existing_article.content # type: ignore
+                    art.content_html = sanitize_utf8(art.content_html) if art.content_html else None # type: ignore
+                    if art.content_html is None:
                         from tools.fix import fix_html
-                        art.content_html = fix_html(art.content_html) # type: ignore
+                        art.content_html = fix_html(art.content) # type: ignore
                     # 设置 has_content 字段
                     art.has_content = 1 if (art.content and art.content.strip()) else 0 # type: ignore
                     session.merge(art)  # 使用 merge 来更新现有记录
