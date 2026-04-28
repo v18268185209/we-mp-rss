@@ -207,7 +207,9 @@ class WxGather:
                     "url":data['link'],  # 文章链接地址
                     "pic_url":data['cover'],  # 封面图片URL
                     "content":data.get("content",""),  # 文章正文内容
-                    "publish_type":data.get("publish_type",0),  # 发布类型
+                    "publish_type":data.get("publish_type",0),  # 发布类型(1=普通发布, 101=群发消息)
+                    "art_type":data.get("type",0),  # 展示类型数组(0=图文, 5=视频, 7=音频, 10=贴图)
+                    "show_types":data.get("show_types",0),  # 展示类型数组(0=图文, 5=视频, 7=音频, 10=贴图)
                     "publish_src":data.get("publish_src",0),  # 发布来源
                     "publish_status":data.get("publish_status","200"),  # 发布状态码
                     "publish_time":data.get("update_time",""),  # 发布/更新时间

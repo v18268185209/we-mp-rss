@@ -20,6 +20,8 @@ class ArticleBase(Base):
     publish_type = Column(Integer,index=True)  # 发布类型
     publish_src = Column(Integer,index=True)  # 发布来源
     publish_status = Column(Text,index=True)  # 发布状态
+    art_type = Column(Integer,index=True)  # 内容类型(1=图文/视频/音频, 9=贴图等)
+    show_types = Column(Text)  # 展示类型数组(JSON格式,如[0],[5],[7],[10])
     # 状态与类型标识
     original_check_type = Column(Integer,index=True)  # 原创检测类型
     in_profile = Column(Integer,index=True)  # 是否在主页展示
@@ -58,6 +60,8 @@ class Article(ArticleBase):
             'publish_type': self.publish_type,
             'publish_src': self.publish_src,
             'publish_status': self.publish_status,
+            'type': self.type,
+            'show_types': self.show_types,
             # 状态与类型标识
             'original_check_type': self.original_check_type,
             'in_profile': self.in_profile,
