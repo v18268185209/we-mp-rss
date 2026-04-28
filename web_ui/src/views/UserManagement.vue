@@ -52,6 +52,7 @@ const pagination = reactive({
 const resetPasswordVisible = ref(false)
 const resetPasswordUser = ref<UserListResponse | null>(null)
 const newPassword = ref('')
+const confirmPassword = ref('')
 
 const form = reactive<AddUserParams>({
   username: '',
@@ -83,13 +84,18 @@ const fetchUsers = async () => {
       page: pagination.current,
       page_size: pagination.pageSize
     })
-    console.log('用户列表响应:', res) // 调试日志
     if (res) {
-      userList.value = res.list || []
-      pagination.total = res.total || 0
+      // 如果 res 本身就是数组，直接使用
+      if (Array.isArray(res)) {
+        userList.value = res
+        pagination.total = res.length
+      } else {
+        userList.value = res.list || []
+        pagination.total = res.total || 0
+      }
     }
   } catch (err) {
-    console.error('获取用户列表失败:', err) // 调试日志
+    console.error('获取用户列表失败:', err)
     error.value = err instanceof Error ? err.message : '获取用户列表失败'
     Message.error(error.value)
   } finally {
@@ -203,27 +209,39 @@ const handleDelete = (record: UserListResponse) => {
 const showResetPasswordModal = (record: UserListResponse) => {
   resetPasswordUser.value = record
   newPassword.value = ''
+  confirmPassword.value = ''
   resetPasswordVisible.value = true
 }
 
 const handleResetPassword = async () => {
   if (!resetPasswordUser.value) return
-  
+
   if (!newPassword.value.trim()) {
     Message.error('请输入新密码')
     return
   }
-  
+
   if (newPassword.value.length < 8) {
     Message.error('密码长度不能少于8位')
     return
   }
-  
+
+  if (!confirmPassword.value.trim()) {
+    Message.error('请确认新密码')
+    return
+  }
+
+  if (newPassword.value !== confirmPassword.value) {
+    Message.error('两次输入的密码不一致')
+    return
+  }
+
   try {
     await resetUserPassword(resetPasswordUser.value.id, newPassword.value)
     Message.success('密码重置成功')
     resetPasswordVisible.value = false
     newPassword.value = ''
+    confirmPassword.value = ''
   } catch (err) {
     error.value = err instanceof Error ? err.message : '密码重置失败'
     Message.error(error.value)
@@ -333,8 +351,8 @@ onMounted(() => {
 
           <template #action="{ record }">
             <a-space size="small">
-              <a-button 
-                type="text" 
+              <a-button
+                type="text"
                 size="small"
                 @click="editUser(record)"
               >
@@ -342,8 +360,8 @@ onMounted(() => {
                   <icon-edit />
                 </template>
               </a-button>
-              <a-button 
-                type="text" 
+              <a-button
+                type="text"
                 size="small"
                 status="success"
                 @click="showResetPasswordModal(record)"
@@ -446,13 +464,16 @@ onMounted(() => {
       @cancel="resetPasswordVisible = false"
     >
       <a-form layout="vertical">
-        <a-form-item label="用户">
-          <a-input :value="resetPasswordUser?.username" disabled />
-        </a-form-item>
         <a-form-item label="新密码" required>
-          <a-input-password 
-            v-model="newPassword" 
+          <a-input-password
+            v-model="newPassword"
             placeholder="请输入新密码（至少8位）"
+          />
+        </a-form-item>
+        <a-form-item label="确认密码" required>
+          <a-input-password
+            v-model="confirmPassword"
+            placeholder="请再次输入新密码"
           />
         </a-form-item>
         <a-alert type="warning" show-icon>
