@@ -200,7 +200,16 @@ class WxGather:
                 # is_pay_subscribe：是否为付费订阅内容
                 # item_show_type：展示类型（0通常为普通图文，10可能为特定的无图或特殊样式）
                 # has_red_packet_cover：封面是否有红包挂件（0为无）
-                # 处理 show_types 数组字段
+                
+                # 处理 publish_info 字段（Text类型，JSON字符串）
+                publish_info_value = data.get("publish_info")
+                if publish_info_value is not None:
+                    if isinstance(publish_info_value, dict):
+                        publish_info_str = json.dumps(publish_info_value)
+                    else:
+                        publish_info_str = str(publish_info_value)
+                else:
+                    publish_info_str = ""
                 
                 art={
                     "id":str(data['id']),  # 文章唯一标识ID
@@ -211,7 +220,7 @@ class WxGather:
                     "content":data.get("content",""),  # 文章正文内容
                     "publish_type":data.get("publish_type",0),  # 发布类型(1=普通发布, 101=群发消息)
                     "art_type":data.get("type",0),  # 展示类型(0=图文, 5=视频, 7=音频, 10=贴图)
-                    "show_type": data.get("show_type") or data.get("item_show_type"),  # 展示类型(0=图文, 5=视频, 7=音频, 10=贴图)
+                    "show_type": data.get("show_type",0),  # 展示类型(0=图文, 5=视频, 7=音频, 10=贴图)
                     "publish_src":data.get("publish_src",0),  # 发布来源
                     "publish_status":data.get("publish_status","200"),  # 发布状态码
                     "publish_time":data.get("update_time",""),  # 发布/更新时间
@@ -224,7 +233,7 @@ class WxGather:
                     "copyright_stat":data.get("copyright_stat",0),  # 版权/原创状态(0非原创,1原创)
                     "has_red_packet_cover":data.get("has_red_packet_cover",0),  # 封面是否有红包挂件
                     "status": DATA_STATUS.DELETED if data.get("is_deleted",False) else DATA_STATUS.ACTIVE,  # 数据状态(已删除/正常)
-                    "publish_info":data.get("publish_info",{}),  # 发布信息（可能包含群发消息等复杂结构）
+                    "publish_info": publish_info_str,  # 发布信息（JSON格式字符串）
                 }
                 if 'digest' in data:
                     art['description']=data['digest']
