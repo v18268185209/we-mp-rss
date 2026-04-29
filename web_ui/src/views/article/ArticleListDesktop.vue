@@ -434,14 +434,16 @@ const itemShowTypeTextMap: Record<number, string> = {
   0: '图文',
   5: '视频',
   7: '音频',
-  10: '贴图'
+  10: '贴图',
+  11: '分享',
 }
 
 const itemShowTypeColorMap: Record<number, string> = {
   0: 'green',
   5: 'red',
   7: 'orange',
-  10: 'purple'
+  10: 'purple',
+  11: 'green'
 }
 
 // 发布类型映射
@@ -681,7 +683,7 @@ const columns = computed(() => {
         return h('a-tag', {
           color: itemShowTypeColorMap[showType] || 'gray',
           size: 'small'
-        }, itemShowTypeTextMap[showType] || '图文')
+        }, itemShowTypeTextMap[showType] || showType)
       }
     },
     {
